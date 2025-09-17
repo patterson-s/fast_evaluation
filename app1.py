@@ -40,7 +40,7 @@ def display_pdf(pdf_file):
             
             # Convert to PIL Image for streamlit
             img = Image.open(io.BytesIO(img_data))
-            st.image(img, caption=f"Page {page_num + 1}", use_column_width=True)
+            st.image(img, caption=f"Page {page_num + 1}", use_container_width=True)
         
         pdf_document.close()
             
