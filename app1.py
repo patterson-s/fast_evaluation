@@ -1,9 +1,11 @@
 import streamlit as st
 import json
-import base64
 from pathlib import Path
 import re
 from datetime import datetime
+import fitz  # PyMuPDF
+from PIL import Image
+import io
 
 def extract_pdf_metadata(filename: str) -> tuple[str, str, str]:
     """Extract country code, month, and year from filename."""
@@ -19,21 +21,29 @@ def extract_pdf_metadata(filename: str) -> tuple[str, str, str]:
         return None, None, None
 
 def display_pdf(pdf_file):
-    """Display PDF using object tag - more Chrome compatible."""
+    """Display PDF by converting to images using PyMuPDF."""
     try:
         # Reset file pointer
         pdf_file.seek(0)
-        base64_pdf = base64.b64encode(pdf_file.read()).decode('utf-8')
+        pdf_bytes = pdf_file.read()
         
-        # Try object tag first (more compatible than iframe)
-        pdf_display = f"""
-        <object data="data:application/pdf;base64,{base64_pdf}" type="application/pdf" width="100%" height="800px">
-            <p>Votre navigateur ne peut pas afficher le PDF. 
-            <a href="data:application/pdf;base64,{base64_pdf}" target="_blank">Cliquez ici pour l'ouvrir dans un nouvel onglet.</a></p>
-        </object>
-        """
-        st.markdown(pdf_display, unsafe_allow_html=True)
+        # Open PDF with PyMuPDF
+        pdf_document = fitz.open(stream=pdf_bytes, filetype="pdf")
         
+        # Convert each page to image
+        for page_num in range(pdf_document.page_count):
+            page = pdf_document[page_num]
+            # Render page to image (matrix for scaling)
+            mat = fitz.Matrix(2, 2)  # 2x zoom for better quality
+            pix = page.get_pixmap(matrix=mat)
+            img_data = pix.tobytes("png")
+            
+            # Convert to PIL Image for streamlit
+            img = Image.open(io.BytesIO(img_data))
+            st.image(img, caption=f"Page {page_num + 1}", use_column_width=True)
+        
+        pdf_document.close()
+            
     except Exception as e:
         st.error(f"Erreur lors de l'affichage du PDF: {str(e)}")
         # Fallback to download button
