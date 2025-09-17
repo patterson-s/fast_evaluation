@@ -3,6 +3,7 @@ import json
 import base64
 from pathlib import Path
 import re
+from datetime import datetime
 
 def extract_pdf_metadata(filename: str) -> tuple[str, str, str]:
     """Extract country code, month, and year from filename."""
@@ -18,12 +19,34 @@ def extract_pdf_metadata(filename: str) -> tuple[str, str, str]:
         return None, None, None
 
 def display_pdf(pdf_file):
-    """Display PDF using base64 encoding."""
-    base64_pdf = base64.b64encode(pdf_file.read()).decode('utf-8')
-    pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="800" type="application/pdf"></iframe>'
-    st.markdown(pdf_display, unsafe_allow_html=True)
+    """Display PDF using Streamlit's native method."""
+    try:
+        # Reset file pointer to beginning
+        pdf_file.seek(0)
+        # Use st.download_button as a workaround to display PDF content
+        st.download_button(
+            label="📄 Ouvrir le PDF dans un nouvel onglet",
+            data=pdf_file.read(),
+            file_name=pdf_file.name,
+            mime="application/pdf"
+        )
+        # Reset file pointer again for potential re-use
+        pdf_file.seek(0)
+        
+        # Alternative: Show PDF info
+        st.info("Le PDF est prêt à être visualisé. Cliquez sur le bouton ci-dessus pour l'ouvrir dans un nouvel onglet.")
+        
+    except Exception as e:
+        st.error(f"Erreur lors de l'affichage du PDF: {str(e)}")
+        st.info("Vous pouvez télécharger le PDF avec le bouton ci-dessus.")
 
-def load_annotations_file(filename: str = "annotations_app1.json") -> list:
+def get_annotations_filename(annotator_name: str) -> str:
+    """Generate filename with annotator name and date."""
+    date_str = datetime.now().strftime("%Y%m%d")
+    clean_name = re.sub(r'[^\w\-_]', '', annotator_name.lower())
+    return f"{clean_name}_{date_str}.json"
+
+def load_annotations_file(filename: str) -> list:
     """Load existing annotations from file."""
     try:
         with open(filename, 'r') as f:
@@ -33,7 +56,7 @@ def load_annotations_file(filename: str = "annotations_app1.json") -> list:
     except json.JSONDecodeError:
         return []
 
-def save_annotation_to_dataset(annotator: str, country: str, month: str, year: str, summary: str, filename: str = "annotations_app1.json"):
+def save_annotation_to_dataset(annotator: str, country: str, month: str, year: str, summary: str, filename: str):
     """Add annotation to the dataset JSON file."""
     annotations = load_annotations_file(filename)
     
@@ -56,15 +79,13 @@ def main():
     st.set_page_config(page_title="Interface d'Annotation PDF - App 1", layout="wide")
     st.title("Interface d'Annotation de Prévisions de Conflits - App 1")
     
-    # Load existing annotations from file
-    annotations_file = "annotations_app1.json"
-    all_annotations = load_annotations_file(annotations_file)
-    
     # Initialize session state for annotations
     if 'session_annotations' not in st.session_state:
         st.session_state.session_annotations = []
     if 'annotator_name' not in st.session_state:
         st.session_state.annotator_name = ""
+    if 'annotations_filename' not in st.session_state:
+        st.session_state.annotations_filename = ""
     
     annotator_name = st.text_input(
         "Nom de l'Annotateur :",
@@ -76,6 +97,12 @@ def main():
     if not annotator_name:
         st.warning("Veuillez entrer votre nom d'annotateur pour continuer.")
         return
+    
+    # Generate filename for this annotator
+    if not st.session_state.annotations_filename:
+        st.session_state.annotations_filename = get_annotations_filename(annotator_name)
+    
+    annotations_file = st.session_state.annotations_filename
     
     # PDF upload
     uploaded_file = st.file_uploader(
@@ -132,7 +159,7 @@ def main():
                         }
                         st.session_state.session_annotations.append(annotation_data)
                         
-                        st.success(f"Annotation sauvegardée dans le jeu de données !")
+                        st.success(f"Annotation sauvegardée dans {annotations_file}!")
                         
                         # Clear the current summary text area
                         del st.session_state[f"summary_{country}_{month}_{year}"]
@@ -151,13 +178,14 @@ def main():
                 # Show download section in sidebar only after user has annotations
                 st.sidebar.header("Téléchargement du Jeu de Données")
                 current_annotations = load_annotations_file(annotations_file)
-                st.sidebar.write(f"Total d'annotations dans le jeu de données : {len(current_annotations)}")
+                st.sidebar.write(f"Total d'annotations : {len(current_annotations)}")
+                st.sidebar.write(f"Fichier : {annotations_file}")
                 
                 # Convert to JSON string for download
                 json_str = json.dumps(current_annotations, indent=2)
                 
                 st.sidebar.download_button(
-                    label="Télécharger le Jeu de Données Complet",
+                    label="Télécharger Vos Annotations",
                     data=json_str,
                     file_name=annotations_file,
                     mime="application/json"
