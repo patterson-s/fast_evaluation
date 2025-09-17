@@ -19,26 +19,31 @@ def extract_pdf_metadata(filename: str) -> tuple[str, str, str]:
         return None, None, None
 
 def display_pdf(pdf_file):
-    """Display PDF using Streamlit's native method."""
+    """Display PDF using object tag - more Chrome compatible."""
     try:
-        # Reset file pointer to beginning
+        # Reset file pointer
         pdf_file.seek(0)
-        # Use st.download_button as a workaround to display PDF content
+        base64_pdf = base64.b64encode(pdf_file.read()).decode('utf-8')
+        
+        # Try object tag first (more compatible than iframe)
+        pdf_display = f"""
+        <object data="data:application/pdf;base64,{base64_pdf}" type="application/pdf" width="100%" height="800px">
+            <p>Votre navigateur ne peut pas afficher le PDF. 
+            <a href="data:application/pdf;base64,{base64_pdf}" target="_blank">Cliquez ici pour l'ouvrir dans un nouvel onglet.</a></p>
+        </object>
+        """
+        st.markdown(pdf_display, unsafe_allow_html=True)
+        
+    except Exception as e:
+        st.error(f"Erreur lors de l'affichage du PDF: {str(e)}")
+        # Fallback to download button
+        pdf_file.seek(0)
         st.download_button(
-            label="📄 Ouvrir le PDF dans un nouvel onglet",
+            label="📄 Télécharger le PDF",
             data=pdf_file.read(),
             file_name=pdf_file.name,
             mime="application/pdf"
         )
-        # Reset file pointer again for potential re-use
-        pdf_file.seek(0)
-        
-        # Alternative: Show PDF info
-        st.info("Le PDF est prêt à être visualisé. Cliquez sur le bouton ci-dessus pour l'ouvrir dans un nouvel onglet.")
-        
-    except Exception as e:
-        st.error(f"Erreur lors de l'affichage du PDF: {str(e)}")
-        st.info("Vous pouvez télécharger le PDF avec le bouton ci-dessus.")
 
 def get_annotations_filename(annotator_name: str) -> str:
     """Generate filename with annotator name and date."""
